@@ -1,0 +1,466 @@
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script>
+
+	let margin = {top: 20, right: 20, bottom: 30, left: 50},
+    width = 960 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+	let idleTimeout, idleDelay = 350;
+
+    document.body = document.createElement("body");
+    let svg = d3.select("body").append("svg")
+    	.attr("width", width + margin.left + margin.right)
+    	.attr("height", height + margin.top + margin.bottom + 50)
+        .attr("id", "mySvg")
+  		.append("g")
+    		.attr("transform",
+          		  "translate(" + margin.left + "," + margin.top + ")");
+
+	let make_graph = async function() {
+		let data = await d3.json("ogs-data.json", function(r) {
+			return r;
+		});
+		console.log(data);
+
+		let player = data['player'];
+        let player_id = player['id'];
+
+        let games = data['games']['results'];
+
+        let rating_to_rank = function(rating) {
+            return -0.0239*rating + 48.02486
+        };
+
+        let getOtherColor = function(color) {
+            if (color === "black") {
+                return "white";
+            }
+            else {
+                return "black";
+            }
+        };
+
+        let getOpponentColor = function(game) {
+            if (game["players"]["black"]["id"] === player_id) {
+                return "white";
+            }
+            else {
+                return "black";
+            }
+        };
+
+        let getOpponent = function(game) {
+            return game["players"][getOpponentColor(game)]
+        };
+
+        let getOpponentRank = function(game) {
+            let opponent = getOpponent(game);
+            return rating_to_rank(opponent["ratings"]["overall"]["rating"]);
+        };
+
+        let won = function(game) {
+            let player_color = getOtherColor(getOpponentColor(game));
+            return !game[player_color + "_lost"];
+        };
+
+        let getColor = function(game) {
+            switch (won(game)) {
+                case true:
+                    return "green";
+                case false:
+                    return "red";
+            }
+        };
+
+        let x0 = d3.extent(games, game => {
+			    return new Date(game["started"]);
+            });
+		let xScaler = d3.scaleTime()
+			.range([0, 550])
+			.domain(x0)
+            .nice();
+
+		// idk why I need this
+        let _opp_ranks = games.map(game => {
+            return getOpponentRank(game)
+        });
+
+        let y0 = d3.extent(_opp_ranks);
+		let yScaler = d3.scaleLinear()
+			.range([450, 0])
+			.domain(y0)
+            .nice();
+
+		svg.append("rect")
+		    .attr("x", xScaler(1500))
+		    .attr("y", 0)
+		    .attr("width", xScaler(xScaler.domain()[xScaler.domain().length - 1]) - xScaler(1500))
+		    .attr("height", height)
+		    .attr("fill", "#D3D3D3")
+		    .attr("opacity", 0.2);
+
+		svg.append("g")
+      		.attr("class", "grid")
+      		.attr("transform", "translate(0," + height + ")")
+      		.call(d3.axisBottom(xScaler)
+      			.ticks(8)
+          		.tickSize(-height)
+      		)
+      		.call(g => g.selectAll(".tick line")
+		        .attr("stroke", "white")
+		        .attr("stroke-width", 1))
+      		.call(g => g.select(".domain").remove())
+      		.call(g => g.selectAll(".tick text").remove())
+
+  		svg.append("g")
+      		.attr("class", "grid")
+      		.call(d3.axisLeft(yScaler)
+      			.ticks(8)
+          		.tickSize(-xScaler.range()[1])
+      		)
+      		.call(g => g.selectAll(".tick line")
+		        .attr("stroke", "white")
+		        .attr("stroke-width", 2))
+      		.call(g => g.select(".domain").remove())
+      		.call(g => g.selectAll(".tick text").remove());
+
+		let brush = d3.brush()
+            .extent( [ [0,0], [width,height] ] );
+
+        let brushG = svg.append("g")
+            .attr("class", "brush")
+            .call(brush);
+
+		let dotGroup = svg.append('g')
+			.attr("id", "graph");
+
+        let dots = dotGroup
+			.selectAll("dot")
+		    .data(games)
+		    .enter().append("circle");
+
+        let update = (x, y) => {
+		    dots.attr("r", (d) => {
+		    	return 3;
+		    })
+		    .attr("cx", (d) => {
+		        // console.log(d);
+		        return x(new Date(d["started"]));
+		    })
+		    .attr("cy", (d) => {
+                // console.log(d);
+		        return y(getOpponentRank(d));
+		    })
+		    .attr("fill", (d) => {
+                // console.log(d)
+		    	return getColor(d);
+		    })
+		    .attr("fill-opacity", 0.5)
+		    .attr("stroke", (d) => {
+		        return getColor(d);
+		    })
+		    .attr("stroke-width", 1)
+			.attr("stroke-opacity", 0.8)
+            .attr("id", (d) => {
+                return d["related"]["detail"].replaceAll("/","");
+            })
+            .on("mouseover", (d) => {
+                showData(d);
+            })
+            .on("mouseout", (d) => {
+                hideData(d);
+            });
+        };
+        update(xScaler, yScaler);
+
+		let xAxis = svg.append("g").attr("id", "xAxis")
+    		.call(d3.axisBottom(xScaler).ticks(4))
+    		.attr("transform", "translate(0," + height + ")")
+    		.call(g => g.select(".domain").remove());
+
+    	let yAxis = svg.append("g").attr("id", "yAxis")
+    		.call(d3.axisLeft(yScaler).ticks(4))
+    		.call(g => g.select(".domain").remove());
+
+    	svg.append("text")
+      		.attr("transform",
+            	  "translate(" + (xScaler.range()[1]/2) + " ," +
+                           		 (height + margin.top + 20) + ")")
+      		.style("text-anchor", "middle")
+      		.text("Date");
+
+      	svg.append("text")
+      		.attr("transform", "rotate(-90)")
+      		.attr("y", 0 - margin.left)
+      		.attr("x",0 - (height / 2))
+      		.attr("dy", "1em")
+      		.style("text-anchor", "middle")
+      		.text("Opponent Rank");
+
+      	svg.append("foreignObject")
+            .attr("width", 200)
+            .attr("height", 150)
+      		.attr("transform",
+            	  "translate(" + (width - 330) + " ," +
+                           		 (height/2 + 100) + ")")
+            .append("xhtml:body")
+            .attr("class", "tooltip")
+      		.style("text-anchor", "middle")
+      		.html("Manufacturer:")
+            .attr("opacity", "0");
+
+      	svg.append("foreignObject")
+            .attr("width", 200)
+            .attr("height", 300)
+      		.attr("transform",
+            	  "translate(" + (width - 330) + " ," +
+                           		 (margin.top) + ")")
+            .append("xhtml:body")
+            .attr("class", "controls")
+      		.html("<input type=checkbox id=wonCheck checked></input>" +
+                "<label for=\"wonCheck\">Won</label>" +
+                "<br/>" +
+                "<input type=checkbox id=lostCheck checked/>" +
+                "<label for=\"lostCheck\">Lost</label>" +
+                "<br/><br/>" +
+                "<input type=checkbox id=resignCheck checked/>" +
+                "<label for=\"resignCheck\">Resignation</label>" +
+                "<br/>" +
+                "<input type=checkbox id=noResignCheck checked/>" +
+                "<label for=\"noResignCheck\">Not Resignation</label>" +
+                "<br/><br/>" +
+                "<input type=checkbox id=nineCheck checked/>" +
+                "<label for=\"nineCheck\">9x9</label>" +
+                "<br/>" +
+                "<input type=checkbox id=thirteenCheck checked/>" +
+                "<label for=\"thirteenCheck\">13x13</label>" +
+                "<br/>" +
+                "<input type=checkbox id=nineteenCheck checked/>" +
+                "<label for=\"nineteenCheck\">19x19</label>" +
+                "<br/><br/>" +
+                "<input type=checkbox id=rankedCheck checked/>" +
+                "<label for=\"rankedCheck\">Ranked</label>" +
+                "<br/>" +
+                "<input type=checkbox id=unrankedCheck checked/>" +
+                "<label for=\"unrankedCheck\">Unranked</label>" +
+                "<br/><br/>" +
+                "<input type=checkbox id=handiCheck checked/>" +
+                "<label for=\"handiCheck\">Handicap</label>" +
+                "<br/>" +
+                "<input type=checkbox id=evenCheck checked/>" +
+                "<label for=\"evenCheck\">Even Game</label>")
+            .on("click", function(d, i){
+                console.log("Redrawing dots");
+                redraw();
+            });
+
+      	let controls = d3.select(".controls")
+            .style("marginLeft", width + margin.left + margin.right)
+
+        let win_options = [true, false];
+      	let win_select = svg.append('div')
+            .selectAll('winOptions')
+            .data(win_options)
+            .enter()
+            .append('input')
+            .text(d => {
+                if (d) {
+                    return "Won";
+                }
+                else {
+                    return "Lost";
+                }
+            })
+            .attr("value", d => { return d; });
+
+      	let showData = function(d) {
+            let circ = d3.selectAll("#"+d["related"]["detail"].replaceAll("/",""));
+            circ.attr("r", (data) => {
+                return 16
+            }).transition()
+                .duration(200);
+
+            let createTooltip = function(d) {
+                let out = "";
+                out += "Opponent: " + getOpponent(d)["username"] + "<br/>";
+                out += "Rank: " + getOpponentRank(d) + "<br/>";
+                out += "Won: " + won(d) + "<br/>";
+                out += "Resignation: " + (d["outcome"] === "Resignation") + "<br/>";
+                out += "Board Size: " + d["width"] + "x" + d["width"] + "<br/>";
+                out += "Ranked: " + d["ranked"] + "<br/>";
+                out += "Handicap: " + d["handicap"] + "<br/>";
+
+                return out;
+            };
+
+            d3.select(".tooltip")
+                .attr("opacity", "1")
+                .html(createTooltip(d))
+                .attr("font-size", "30px")
+                .attr("fontWeight", "50")
+                .transition(200)
+
+        };
+        let hideData = function(d) {
+            let circ = d3.selectAll("#"+d["related"]["detail"].replaceAll("/",""));
+            circ.attr("r", (data) => {
+                return 3
+            }).transition()
+                .duration(300);
+
+            d3.select(".tooltip")
+                .attr("opacity", "0")
+                .transition(200)
+        };
+
+        function redraw() {
+            let keep_won = document.getElementById('wonCheck').checked;
+            let keep_lost = document.getElementById('lostCheck').checked;
+            let keep_resign = document.getElementById('resignCheck').checked;
+            let keep_noresign = document.getElementById('noResignCheck').checked;
+            let keep_nine = document.getElementById('nineCheck').checked;
+            let keep_thirteen = document.getElementById('thirteenCheck').checked;
+            let keep_nineteen = document.getElementById('nineteenCheck').checked;
+            let keep_ranked = document.getElementById('rankedCheck').checked;
+            let keep_unranked = document.getElementById('unrankedCheck').checked;
+            let keep_handicap = document.getElementById('handiCheck').checked;
+            let keep_even = document.getElementById('evenCheck').checked;
+            console.log("Nine", keep_nine);
+
+
+            let newData = games.filter(d => {
+                // console.log(d);
+                if (d["width"] === 9) {
+                    console.log(!keep_nine)
+                }
+                // if (d["width"] === 9 && !keep_nine) {
+                //     console.log(d
+                //         , (won(d) && !keep_won)
+                //         , (!won(d) && !keep_lost)
+                //         , (d["outcome"] === "Resignation" && !keep_resign)
+                //         , (d["outcome"] !== "Resignation" && !keep_noresign)
+                //         , (d["width"] === 9 && !keep_nine)
+                //         , (d["width"] === 13 && !keep_thirteen)
+                //         , (d["width"] === 19 && !keep_nineteen)
+                //         , (d["ranked"] && !keep_ranked)
+                //         , (!d["ranked"] && !keep_unranked)
+                //         , (d["handicap"] !== 0 && !keep_handicap)
+                //         , (d["handicap"] === 0 && !keep_even));
+                // }
+                return !((won(d) && !keep_won)
+                    || (!won(d) && !keep_lost)
+                    || (d["outcome"] === "Resignation" && !keep_resign)
+                    || (d["outcome"] !== "Resignation" && !keep_noresign)
+                    || (d["width"] === 9 && !keep_nine)
+                    || (d["width"] === 13 && !keep_thirteen)
+                    || (d["width"] === 19 && !keep_nineteen)
+                    || (d["ranked"] && !keep_ranked)
+                    || (!d["ranked"] && !keep_unranked)
+                    || (d["handicap"] !== 0 && !keep_handicap)
+                    || (d["handicap"] === 0 && !keep_even));
+            });
+            console.log("after", games, newData);
+
+            x0 = d3.extent(newData, game => {
+			    return new Date(game["started"]);
+            });
+            xScaler = d3.scaleTime()
+                .range([0, 550])
+                .domain(x0)
+                .nice();
+
+            // idk why I need this
+            _opp_ranks = newData.map(game => {
+                return getOpponentRank(game)
+            });
+
+            y0 = d3.extent(_opp_ranks);
+            yScaler = d3.scaleLinear()
+                .range([450, 0])
+                .domain(y0)
+                .nice();
+
+            dots
+                .data([])
+                .exit().remove();
+
+            dots = dotGroup
+                .selectAll("dot")
+                .data(newData)
+                .enter().append("circle");
+
+            update(xScaler, yScaler);
+
+            xAxis.transition().duration(500).call(d3.axisBottom(xScaler));
+            yAxis.transition().duration(500).call(d3.axisLeft(yScaler));
+        }
+
+        zoom = () => {
+            let selection = d3.event.selection;
+            console.log(selection);
+
+            let tempX = xScaler;
+            let tempY = yScaler;
+
+            if (!selection) {
+                if (!idleTimeout) return idleTimeout = setTimeout(() => {
+                    idleTimeout = null
+                }, idleDelay);
+                xScaler.domain(x0).nice();
+                yScaler.domain(y0).nice();
+            } else {
+                xScaler.domain([selection[0][0], selection[1][0]].map(xScaler.invert, xScaler)).nice();
+                yScaler.domain([selection[1][1], selection[0][1]].map(yScaler.invert, yScaler)).nice();
+                brushG.call(brush.move, null);
+            }
+
+            dots.transition().duration(500)
+                .attr("cx", function (d) {
+                    return xScaler(new Date(d["started"]));
+                })
+                .attr("cy", (d) => {
+                    return yScaler(getOpponentRank(d));
+                })
+                .attr("fill-opacity", (d) => {
+                    let x = xScaler(new Date(d["started"]));
+                    let y = yScaler(getOpponentRank(d));
+                    if (
+                        x >= xScaler.range()[0]
+                        && x <= xScaler.range()[1]
+                        // yScaler works backwards, so the operators had to be flipped
+                        && y <= yScaler.range()[0]
+                        && y >= yScaler.range()[1]) {
+
+                        return 0.5;
+                    }
+                    else {
+                        return 0;
+                    }
+                })
+                .attr("stroke-opacity", (d) => {
+                    let x = xScaler(new Date(d["started"]));
+                    let y = yScaler(getOpponentRank(d));
+                    if (
+                        x >= xScaler.range()[0]
+                        && x <= xScaler.range()[1]
+                        // yScaler works backwards, so the operators had to be flipped
+                        && y <= yScaler.range()[0]
+                        && y >= yScaler.range()[1]) {
+
+                        return 0.8;
+                    }
+                    else {
+                        return 0;
+                    }
+                });
+
+            xAxis.transition().duration(500).call(d3.axisBottom(xScaler));
+            yAxis.transition().duration(500).call(d3.axisLeft(yScaler));
+        };
+
+        brush.on("end", zoom);
+	};
+
+	make_graph();
+
+</script>
