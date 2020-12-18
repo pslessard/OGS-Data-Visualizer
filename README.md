@@ -13,4 +13,5 @@ Click the checkboxes to filter data. If there's another filter you want, let me
 know, I can look into adding it when I have time.
 Click and drag within the graph to zoom in. Double click to zoom back out.
 
+### Disclaimer
 This code is super rough, so there might be bugs.
