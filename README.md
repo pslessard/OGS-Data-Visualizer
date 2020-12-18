@@ -15,3 +15,8 @@ Click and drag within the graph to zoom in. Double click to zoom back out.
 
 ### Disclaimer
 This code is super rough, so there might be bugs.
+Also, the rank displayed is approximation. The data only contains a rating, and
+to calculate a rank, I just took a sample of data points from my own data and
+ran linear regression on them. That's why dan ranks are listed as negative
+numbers (and are not accurate. ie. a rank of -2 is not necessarily equal to 2
+dan)

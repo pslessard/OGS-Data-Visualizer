@@ -54,9 +54,13 @@
             return game["players"][getOpponentColor(game)]
         };
 
+        let truncate = (num, precision) => {
+            return Math.trunc(num * (10**precision)) / (10**precision)
+        };
+
         let getOpponentRank = function(game) {
-            let opponent = getOpponent(game);
-            return rating_to_rank(opponent["ratings"]["overall"]["rating"]);
+            let opponent = game["historical_ratings"][getOpponentColor(game)];
+            return truncate(rating_to_rank(opponent["ratings"]["overall"]["rating"]), 2);
         };
 
         let won = function(game) {
