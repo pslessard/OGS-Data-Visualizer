@@ -26,6 +26,7 @@
         let player_id = player['id'];
 
         let games = data['games']['results'];
+        let newData = games;
 
         let rating_to_rank = function(rating) {
             return -0.0239*rating + 48.02486
@@ -72,7 +73,7 @@
             }
         };
 
-        let x0 = d3.extent(games, game => {
+        let x0 = d3.extent(newData, game => {
 			    return new Date(game["started"]);
             });
 		let xScaler = d3.scaleTime()
@@ -81,7 +82,7 @@
             .nice();
 
 		// idk why I need this
-        let _opp_ranks = games.map(game => {
+        let _opp_ranks = newData.map(game => {
             return getOpponentRank(game)
         });
 
@@ -136,7 +137,7 @@
 
         let dots = dotGroup
 			.selectAll("dot")
-		    .data(games)
+		    .data(newData)
 		    .enter().append("circle");
 
         let update = (x, y) => {
@@ -202,15 +203,21 @@
             .attr("height", 150)
       		.attr("transform",
             	  "translate(" + (width - 330) + " ," +
-                           		 (height/2 + 100) + ")")
+                           		 (height/2 + 150) + ")")
             .append("xhtml:body")
             .attr("class", "tooltip")
       		.style("text-anchor", "middle")
+            .html(
+                "" +
+                newData.length +
+                " games shown<br/>" +
+                games.length +
+                " games total")
             .attr("opacity", "0");
 
       	svg.append("foreignObject")
             .attr("width", 200)
-            .attr("height", 300)
+            .attr("height", 360)
       		.attr("transform",
             	  "translate(" + (width - 330) + " ," +
                            		 (margin.top) + ")")
@@ -247,7 +254,13 @@
                 "<label for=\"handiCheck\">Handicap</label>" +
                 "<br/>" +
                 "<input type=checkbox id=evenCheck checked/>" +
-                "<label for=\"evenCheck\">Even Game</label>")
+                "<label for=\"evenCheck\">Even Game</label>" +
+                "<br/><br/>" +
+                "<input type=checkbox id=blackCheck checked/>" +
+                "<label for=\"handiCheck\">Black</label>" +
+                "<br/>" +
+                "<input type=checkbox id=whiteCheck checked/>" +
+                "<label for=\"evenCheck\">White</label>")
             .on("click", function(d, i){
                 console.log("Redrawing dots");
                 redraw();
@@ -288,6 +301,7 @@
                 out += "Board Size: " + d["width"] + "x" + d["width"] + "<br/>";
                 out += "Ranked: " + d["ranked"] + "<br/>";
                 out += "Handicap: " + d["handicap"] + "<br/>";
+                out += "Color: " + getOtherColor(getOpponentColor(d)) + "<br/>";
 
                 return out;
             };
@@ -301,15 +315,24 @@
 
         };
         let hideData = function(d) {
+            let createGameCount = () => {
+                let out = "" + newData.length + " games shown<br/>";
+                out += games.length + " games total";
+                return out;
+            };
+
+            d3.select(".tooltip")
+                .attr("opacity", "1")
+                .html(createGameCount())
+                .attr("font-size", "30px")
+                .attr("fontWeight", "50")
+                .transition(200);
+
             let circ = d3.selectAll("#"+d["related"]["detail"].replaceAll("/",""));
             circ.attr("r", (data) => {
                 return 3
             }).transition()
                 .duration(300);
-
-            d3.select(".tooltip")
-                .attr("opacity", "0")
-                .transition(200)
         };
 
         function redraw() {
@@ -324,28 +347,12 @@
             let keep_unranked = document.getElementById('unrankedCheck').checked;
             let keep_handicap = document.getElementById('handiCheck').checked;
             let keep_even = document.getElementById('evenCheck').checked;
+            let keep_black = document.getElementById('blackCheck').checked;
+            let keep_white = document.getElementById('whiteCheck').checked;
             console.log("Nine", keep_nine);
 
 
-            let newData = games.filter(d => {
-                // console.log(d);
-                if (d["width"] === 9) {
-                    console.log(!keep_nine)
-                }
-                // if (d["width"] === 9 && !keep_nine) {
-                //     console.log(d
-                //         , (won(d) && !keep_won)
-                //         , (!won(d) && !keep_lost)
-                //         , (d["outcome"] === "Resignation" && !keep_resign)
-                //         , (d["outcome"] !== "Resignation" && !keep_noresign)
-                //         , (d["width"] === 9 && !keep_nine)
-                //         , (d["width"] === 13 && !keep_thirteen)
-                //         , (d["width"] === 19 && !keep_nineteen)
-                //         , (d["ranked"] && !keep_ranked)
-                //         , (!d["ranked"] && !keep_unranked)
-                //         , (d["handicap"] !== 0 && !keep_handicap)
-                //         , (d["handicap"] === 0 && !keep_even));
-                // }
+            newData = games.filter(d => {
                 return !((won(d) && !keep_won)
                     || (!won(d) && !keep_lost)
                     || (d["outcome"] === "Resignation" && !keep_resign)
@@ -356,7 +363,9 @@
                     || (d["ranked"] && !keep_ranked)
                     || (!d["ranked"] && !keep_unranked)
                     || (d["handicap"] !== 0 && !keep_handicap)
-                    || (d["handicap"] === 0 && !keep_even));
+                    || (d["handicap"] === 0 && !keep_even)
+                    || (getOpponentColor(d) === "white" && !keep_black)
+                    || (getOpponentColor(d) === "black" && !keep_white));
             });
             console.log("after", games, newData);
 
@@ -392,6 +401,19 @@
 
             xAxis.transition().duration(500).call(d3.axisBottom(xScaler));
             yAxis.transition().duration(500).call(d3.axisLeft(yScaler));
+
+            let createGameCount = () => {
+                let out = "" + newData.length + " games shown<br/>";
+                out += games.length + " games total";
+                return out;
+            };
+
+            d3.select(".tooltip")
+                .attr("opacity", "1")
+                .html(createGameCount())
+                .attr("font-size", "30px")
+                .attr("fontWeight", "50")
+                .transition(200);
         }
 
         zoom = () => {
